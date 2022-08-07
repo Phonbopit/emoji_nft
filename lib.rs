@@ -4,43 +4,79 @@ use ink_lang as ink;
 
 #[ink::contract]
 mod emoji_nft {
+    use ink_storage::{traits::SpreadAllocate, Mapping};
+
+    use scale::{Decode, Encode};
+
+    pub type TokenId = u32;
 
     /// Defines the storage of your contract.
     /// Add new fields to the below struct in order
     /// to add new static storage fields to your contract.
     #[ink(storage)]
+    #[derive(Default, SpreadAllocate)]
     pub struct EmojiNft {
-        /// Stores a single `bool` value on the storage.
-        value: bool,
+        token_owner: Mapping<TokenId, AccountId>,
+        token_approvals: Mapping<TokenId, AccountId>,
+        owned_tokens_count: Mapping<AccountId, u32>,
+        operator_approvals: Mapping<(AccountId, AccountId), ()>,
+    }
+
+    #[derive(Encode, Decode, Debug, PartialEq, Eq, Copy, Clone)]
+    #[cfg_attr(feature = "std", derive(scale_info::TypeInfo))]
+    pub enum Error {
+        NotOwner,
+        NotApproved,
+        TokenExists,
+    }
+
+    #[ink(event)]
+    pub struct Transfer {
+        #[ink(topic)]
+        from: Option<AccountId>,
+        #[ink(topic)]
+        to: Option<AccountId>,
+        #[ink(topic)]
+        id: TokenId,
+    }
+
+    #[ink(event)]
+    pub struct Approval {
+        #[ink(topic)]
+        from: AccountId,
+        #[ink(topic)]
+        to: AccountId,
+        #[ink(topic)]
+        id: TokenId,
+    }
+
+    #[ink(event)]
+    pub struct ApprovalForAll {
+        #[ink(topic)]
+        owner: AccountId,
+        #[ink(topic)]
+        operator: AccountId,
+        approved: bool,
     }
 
     impl EmojiNft {
-        /// Constructor that initializes the `bool` value to the given `init_value`.
         #[ink(constructor)]
-        pub fn new(init_value: bool) -> Self {
-            Self { value: init_value }
+        pub fn new() -> Self {
+            // This call is required in order to correctly initialize the
+            // `Mapping`s of our contract.
+            ink_lang::utils::initialize_contract(|_| {})
         }
 
-        /// Constructor that initializes the `bool` value to `false`.
-        ///
-        /// Constructors can delegate to other constructors.
-        #[ink(constructor)]
-        pub fn default() -> Self {
-            Self::new(Default::default())
+        pub fn balance_of(&self, owner: AccountId) -> u32 {
+            self.balance_of_or_zero(&owner)
         }
 
-        /// A message that can be called on instantiated contracts.
-        /// This one flips the value of the stored `bool` from `true`
-        /// to `false` and vice versa.
-        #[ink(message)]
-        pub fn flip(&mut self) {
-            self.value = !self.value;
+        pub fn owner_of(&self, id: TokenId) -> Option<AccountId> {
+            self.token_owner.get(&id)
         }
 
-        /// Simply returns the current value of our `bool`.
-        #[ink(message)]
-        pub fn get(&self) -> bool {
-            self.value
+        fn balance_of_or_zero(&self, owner: &AccountId) -> u32 {
+            self.owned_tokens_count.get(owner).unwrap_or(0)
         }
     }
 
